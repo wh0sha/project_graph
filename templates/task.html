@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Задача {{ task_id }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Задача {{ task_id }}</h2>
+    
+    <div class="task-container">
+        <!-- Левая часть: визуализация графа -->
+        <div class="graph-section">
+            <h3>Граф:</h3>
+            <div id="graph-network" style="width: 100%; height: 400px; border: 1px solid #ccc;"></div>
+        </div>
+        
+        <!-- Правая часть: ввод ответа -->
+        <div class="answer-section">
+            <h3>Задание:</h3>
+            <p>1. Введите степени вершин (через запятую):</p>
+            <input type="text" id="degrees-input" placeholder="Например: 2, 3, 1, 2" class="input-field">
+            
+            <p>2. Является ли граф эйлеровым?</p>
+            <select id="euler-select" class="input-field">
+                <option value="">Выберите...</option>
+                <option value="true">Да</option>
+                <option value="false">Нет</option>
+            </select>
+            
+            <button onclick="checkAnswer()" class="btn btn-check">Проверить ответ</button>
+            
+            <div id="result" class="result"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Безопасная передача данных из Flask в JavaScript
+    const graphData = {{ graph_data | tojson | safe }};
+    const taskId = {{ task_id }};
+    
+    console.log("Граф загружен:", graphData);
+    console.log("Задача:", taskId);
+</script>
+{% endblock %}
