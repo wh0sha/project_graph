@@ -1,1 +1,5 @@
-# Сюда будем писать алгоритмы (DFS, BFS, Дейкстра)
+from graph import *
+
+class Algorithms(Graph):
+    def __init__(self):
+        pass
