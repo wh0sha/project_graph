@@ -1,6 +1,18 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
 {% block content %}
-<h1>Дискретные структуры: Графы</h1>
-<p>Проект загружен успешно!</p>
+<div class="container">
+    <h2>Выберите задачу:</h2>
+    <div class="task-list">
+        {% for task in tasks %}
+        <div class="task-card">
+            <h3>Задача {{ task.id }}</h3>
+            <p>{{ task.title }}</p>
+            <a href="{{ url_for('task_0') if task.id <= 3 else '#' }}" class="btn">
+                {% if task.id <= 3 %}Начать{% else %}Скоро{% endif %}
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}
