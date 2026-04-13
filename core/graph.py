@@ -1,4 +1,5 @@
 import numpy as np
+<<<<<<< HEAD
 import random
 
 class Graph:
@@ -17,6 +18,14 @@ class Graph:
         self.vertex = set(range(num_vertices))
         self.edge = set()
         self.incidence = set()
+=======
+
+class Graph:
+    def __init__(self, vertex: set = {}, edge: set = {}, incidence: set = {}):
+        self.vertex = vertex
+        self.edge = edge
+        self.incidence = incidence
+>>>>>>> main
         self.adjacency_list = {}
 
     # немного исправил твои методы
@@ -25,11 +34,20 @@ class Graph:
     def from_adjacency_matrix(cls, matrix):
         matrix = np.array(matrix)
         n = matrix.shape[0]
+<<<<<<< HEAD
         vertex = set(range(n))
         edge = set()
         incidence = set()
         edge_num = 0
         
+=======
+
+        vertex = set(range(n))
+        edge = set()
+        incidence = set()
+
+        edge_num = 0
+>>>>>>> main
         for i in range(n):
             for j in range(i, n):
                 if matrix[i][j] != 0:
@@ -37,6 +55,7 @@ class Graph:
                     incidence.add((edge_num, i, j))
                     edge_num += 1
         
+<<<<<<< HEAD
         graph = cls(n)
         graph.vertex = vertex
         graph.edge = edge
@@ -115,3 +134,36 @@ class Graph:
     def is_bipartite(self):
         """проверка на двудольность (заглушка)"""
         return False
+=======
+        return cls(vertex, edge, incidence)
+
+    @classmethod
+    def from_incidence_matrix(cls, matrix):
+        matrix = np.array(matrix)
+        rows, cols = matrix.shape
+
+        vertex = set(range(rows))
+        edge = set()
+        incidence = set()
+
+        for i in range(rows):
+            not_null = np.where(matrix[i] != 0)[0]
+            
+            edge.add()
+            pass
+    
+    @classmethod
+    def from_adjacency_list(cls, list):
+        pass
+
+    def __repr__(self):
+        return f'G(V={self.vertex}, R={self.edge}, I={self.incidence})'
+
+matrix = np.array([[1,1,0,0], 
+                   [1,0,1,1],
+                   [0,0,0,1],
+                   [0,1,1,0]])
+# g = Graph.from_adjacency_matrix(matrix)
+for i in range(matrix.shape[0]):
+    print(np.where(matrix[i] != 0))
+>>>>>>> main

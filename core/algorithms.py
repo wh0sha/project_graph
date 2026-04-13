@@ -2,19 +2,20 @@ from core.graph import Graph
 from collections import deque
 
 class Algorithms:
+    """
+    Класс с алгоритмами для графов.
+    Принимает граф как аргумент (не наследуется).
+    """
     
     @staticmethod
     def dfs(graph: Graph, start: int):
-        """
-        Поиск в глубину (возвращает список вершин в порядке обхода)
-        """
+        """Поиск в глубину — возвращает список вершин"""
         visited = [False] * graph.num_vertices
         result = []
         
         def _dfs(v):
             visited[v] = True
             result.append(v)
-            # Обходим соседей по порядку (для детерминированности)
             for i in range(graph.num_vertices):
                 if graph.adj_matrix[v][i] == 1 and not visited[i]:
                     _dfs(i)
@@ -24,9 +25,7 @@ class Algorithms:
 
     @staticmethod
     def bfs(graph: Graph, start: int):
-        """
-        Поиск в ширину (возвращает список вершин в порядке обхода)
-        """
+        """Поиск в ширину — возвращает список вершин"""
         visited = [False] * graph.num_vertices
         result = []
         queue = deque([start])
