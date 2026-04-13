@@ -40,7 +40,12 @@
     const graphData = {{ graph_data | tojson | safe }};
     const taskId = {{ task_id }};
     
-    console.log("Граф загружен:", graphData);
-    console.log("Задача:", taskId);
+    console.log("✅ Граф загружен:", graphData);
+    console.log("✅ Задача:", taskId);
+    
+    // Проверка, что данные валидны
+    if (!graphData || !graphData.nodes || !graphData.edges) {
+        console.error("❌ Ошибка: graphData не содержит nodes/edges");
+    }
 </script>
 {% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Задача {{ task_id }}: DFS{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Задача {{ task_id }}: Обход в глубину (показать)</h2>
+    
+    <div class="task-container">
+        <div class="graph-section">
+            <h3>Граф:</h3>
+            <div id="graph-network" style="width: 100%; height: 400px; border: 1px solid #ccc;"></div>
+            <p><strong>Стартовая вершина:</strong> {{ start_vertex + 1 }}</p>
+        </div>
+        
+        <div class="answer-section">
+            <h3>Результат обхода DFS:</h3>
+            <div class="result-box">
+                <code>[{% for v in dfs_result %}{{ v + 1 }}{% if not loop.last %}, {% endif %}{% endfor %}]</code>
+            </div>
+            
+            <button onclick="animateDFS()" class="btn btn-check">🎬 Показать анимацию</button>
+            
+            <div id="animation-info" class="info"></div>
+        </div>
+    </div>
+    
+    <a href="{{ url_for('index') }}" class="btn">← Назад к списку задач</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const graphData = {{ graph_data | tojson | safe }};
+    const startVertex = {{ start_vertex }};
+    const dfsResult = {{ dfs_result }};
+    
+    let network = null;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        drawGraph(graphData);
+    });
+    
+    function drawGraph(data) {
+        const container = document.getElementById('graph-network');
+        const nodes = new vis.DataSet(data.nodes.map(n => ({...n, color: '#667eea'})));
+        const edges = new vis.DataSet(data.edges);
+        
+        const options = {
+            nodes: { shape: 'circle', size: 30, font: { size: 16, color: '#fff' }},
+            edges: { width: 2, color: '#848484' },
+            physics: { enabled: true, stabilization: { iterations: 100 }}
+        };
+        
+        network = new vis.Network(container, {nodes, edges}, options);
+    }
+    
+    function animateDFS() {
+        const info = document.getElementById('animation-info');
+        info.textContent = 'Запуск анимации...';
+        
+        // Подсветка стартовой вершины
+        network.body.data.nodes.update({id: startVertex, color: '#fbbf24'});
+        
+        let step = 0;
+        const interval = setInterval(() => {
+            if (step >= dfsResult.length) {
+                clearInterval(interval);
+                info.textContent = '✅ Обход завершён!';
+                return;
+            }
+            
+            const vertex = dfsResult[step];
+            network.body.data.nodes.update({id: vertex, color: '#10b981'});
+            info.textContent = `Шаг ${step + 1}: вершина ${vertex + 1}`;
+            step++;
+        }, 800);
+    }
+</script>
+{% endblock %}
