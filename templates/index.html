@@ -1,6 +1,29 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<h1>Дискретные структуры: Графы</h1>
-<p>Проект загружен успешно!</p>
+<div class="index-wrapper">
+    <h1>Дискретные структуры: Графы</h1>
+    <p class="subtitle">Выберите задачу для практики. Пройдено: <strong id="progress-count">{{ completed|length }}</strong> / {{ tasks|length }}</p>
+    
+    {% if error %}
+    <div class="flash error">{{ error }}</div>
+    {% endif %}
+
+    <div class="task-list">
+        {% for id, task in tasks|dictsort %}
+        <a href="/task/{{ id }}" class="task-card {{ 'completed' if id in completed else '' }}">
+            <div class="card-header">
+                <span class="task-id">Задача {{ id }}</span>
+                {% if id in completed %}
+                <span class="badge success" title="Решено">[G]</span>
+                {% else %}
+                <span class="badge pending">[ ]</span>
+                {% endif %}
+            </div>
+            <h3>{{ task.title }}</h3>
+            <p class="task-desc">{{ task.description|striptags }}</p>
+            <span class="card-arrow">&rarr;</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}

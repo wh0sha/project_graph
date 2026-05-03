@@ -1,10 +1,14 @@
 # project_graph
-# Проект: Дискретные структуры (Графы)
 
-## Запуск
-1. Создать виртуальное окружение: `python -m venv venv`
-2. Активировать: 
-   - Windows: `venv\Scripts\activate`
-   - Mac/Linux: `source venv/bin/activate`
-3. Установить зависимости: `pip install -r requirements.txt`
-4. Запустить: `python app.py`
+Веб-приложение для практики алгоритмов на графах. Включает 13 задач (0-12) с интерактивной визуализацией, автоматической проверкой ответов и поддержкой тёмной темы.
+
+## 🚀 Технологии
+- **Backend:** Python 3, Flask
+- **Frontend:** Vanilla JS, HTML5, CSS3, Vis.js
+- **Math:** NumPy
+
+## 📦 Установка и запуск
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/wh0sha/project_graph.git
+   cd graph-practice

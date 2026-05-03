@@ -1,0 +1,18 @@
+/* static/css/vis-custom.css */
+.vis-network {
+    width: 100%;
+    height: 100%;
+    background: transparent !important;
+}
+.vis-tooltip {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+    padding: 4px 8px !important;
+    font-family: inherit !important;
+}
+.vis-navigation-panel { display: none !important; }
+.vis-loading-overlay { background: var(--bg) !important; }
+.vis-label { color: var(--text) !important; font-weight: 500 !important; }

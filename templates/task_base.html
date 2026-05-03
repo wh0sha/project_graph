@@ -1,0 +1,40 @@
+<!-- templates/task_base.html -->
+{% extends 'base.html' %}
+
+{% block title %}{{ task.title }} — project_graph{% endblock %}
+
+{% block extra_head %}
+<!-- Дополнительные стили для страницы задачи, если нужны -->
+{% endblock %}
+
+{% block content %}
+<div class="task-wrapper" data-task-id="{{ task.task_id }}">
+    <div class="task-header">
+        <h2>Задача {{ task.task_id }}: {{ task.title }}</h2>
+        <p>{{ task.description|safe }}</p>
+        <p class="vertex-hint">💡 Вершины нумеруются с 0: {{ task.generate_graph().vertex|list }}</p>
+    </div>
+    
+    <div id="graph-container" class="graph-box"></div>
+    
+    <form id="answer-form" class="answer-form">
+        <label for="user-input">Ваш ответ:</label>
+        <input type="text" id="user-input" name="user-input" 
+               placeholder="Например: 0, 1, 2, 3" required>
+        <small class="hint">Формат зависит от задачи — см. описание выше</small>
+        <div class="task-actions">
+            <button type="submit" class="btn-primary">Проверить</button>
+            <button type="button" id="toggle-solution" class="btn-secondary">Показать решение</button>
+        </div>
+    </form>
+    
+    <div id="feedback" class="feedback hidden"></div>
+    <div id="solution" class="solution hidden"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Скрипты, нужные только на странице задачи -->
+<script src="{{ url_for('static', filename='js/graph-renderer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/task-handler.js') }}"></script>
+{% endblock %}

@@ -10,3 +10,6 @@ env/
 *.swo
 .DS_Store
 .pytest_cache/
+*.log
+instance/
+config.local.py

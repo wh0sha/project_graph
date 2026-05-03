@@ -1,15 +1,71 @@
+<!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>Графы - Практика</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="project_graph: Практикум по дискретным структурам и алгоритмам на графах">
+    <title>{% block title %}project_graph{% endblock %}</title>
+    
+    <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/vis-custom.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/vis-network/styles/vis-network.min.css">
+    
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav>
-        <a href="/">Главная</a>
-    </nav>
-    <hr>
-    {% block content %}{% endblock %}
+    <!-- Переключатель темы (показывается на всех страницах) -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Переключить тему">Тема</button>
+    
+    <!-- Шапка -->
+    <header class="app-header">
+        <nav>
+            <a href="/" class="logo">project_graph</a>
+        </nav>
+    </header>
+    
+    <!-- Основной контент -->
+    <main class="container">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for msg in messages %}
+                        <div class="flash">{{ msg }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Футер -->
+    <footer class="app-footer">
+        <p>&copy; 2026 project_graph | Дискретные структуры</p>
+    </footer>
+
+    <!-- 🔥 Общие скрипты -->
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- Скрипт темы (универсальный) -->
+    <script>
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved) document.documentElement.setAttribute('data-theme', saved);
+            const toggle = document.getElementById('themeToggle');
+            if (toggle) {
+                toggle.addEventListener('click', () => {
+                    const current = document.documentElement.getAttribute('data-theme');
+                    const next = current === 'dark' ? 'light' : 'dark';
+                    document.documentElement.setAttribute('data-theme', next);
+                    localStorage.setItem('theme', next);
+                });
+            }
+        })();
+    </script>
+    
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
