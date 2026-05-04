@@ -133,4 +133,7 @@ app.jinja_env.globals['get_input_placeholder'] = get_input_placeholder
 app.jinja_env.globals['get_input_hint'] = get_input_hint
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # 🔥 Для Render: читаем PORT из окружения, для локалки — 5000
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)  # debug=False для продакшена
