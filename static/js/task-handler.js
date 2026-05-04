@@ -9,25 +9,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const feedbackBox = document.getElementById('feedback');
     const form = document.getElementById('answer-form');
     const inputField = document.getElementById('user-input');
+    const toggleSolutionBtn = document.getElementById('toggle-solution');
+
+    let solutionData = null;
+    let isAnimating = false;
 
     // Load task data
     fetch(`/api/task/${taskId}/show`)
         .then(res => res.ok ? res.json() : Promise.reject('Не удалось загрузить задачу'))
         .then(data => {
+            solutionData = data.solution;
             renderer.render(data.graph);
             renderSolution(data.solution, taskId, renderer);
         })
-        .catch(err => window.handleAppError(err));
+        .catch(err => {
+            console.error(err);
+            if (feedbackBox) {
+                feedbackBox.textContent = 'Ошибка загрузки задачи';
+                feedbackBox.className = 'feedback incorrect';
+                feedbackBox.classList.remove('hidden');
+            }
+        });
 
-    // Toggle solution visibility
-    document.getElementById('toggle-solution')?.addEventListener('click', () => {
+    // Toggle solution visibility + animation trigger
+    toggleSolutionBtn?.addEventListener('click', () => {
         solutionBox.classList.toggle('hidden');
+        const isHidden = solutionBox.classList.contains('hidden');
+        toggleSolutionBtn.textContent = isHidden ? 'Показать решение' : 'Скрыть решение';
+        
+        // 🔥 Запускаем анимацию/визуализацию при открытии решения
+        if (!isHidden && solutionData && !isAnimating) {
+            applySolutionVisualization(taskId, solutionData, renderer);
+        }
     });
 
     // Handle form submission
     form?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!inputField) return;
+        if (!inputField || isAnimating) return;
 
         let payload = {};
         try {
@@ -54,14 +73,59 @@ document.addEventListener('DOMContentLoaded', () => {
             showFeedback(result.feedback || result.message, result.correct);
 
             if (result.correct) {
-                if (result.expected?.edges) renderer.highlightEdges(result.expected.edges);
-                if (result.expected?.colors) renderer.colorNodes(result.expected.colors);
-                if (result.expected?.components) renderer.highlightComponents(result.expected.components);
+                applySolutionVisualization(taskId, result.expected || solutionData, renderer);
             }
         } catch {
             showFeedback("Ошибка соединения с сервером.", false);
         }
     });
+
+    // 🔥 НОВАЯ ФУНКЦИЯ: применяет визуализацию решения в зависимости от задачи
+    function applySolutionVisualization(taskId, solution, renderer) {
+        if (!solution) return;
+        isAnimating = true;
+
+        // Задания 1, 3: анимация обхода
+        if ((taskId === '1' || taskId === '3') && solution.order) {
+            renderer.animateTraversal(solution.order, {
+                delay: 700,
+                onStep: (vertex, step, total) => {
+                    if (feedbackBox) {
+                        feedbackBox.textContent = `Шаг ${step + 1}/${total}: вершина ${vertex}`;
+                        feedbackBox.className = 'feedback correct';
+                        feedbackBox.classList.remove('hidden');
+                    }
+                },
+                onComplete: () => {
+                    isAnimating = false;
+                    if (feedbackBox) {
+                        feedbackBox.textContent = 'Обход завершён ✓';
+                        setTimeout(() => feedbackBox.classList.add('hidden'), 2000);
+                    }
+                }
+            });
+            return;
+        }
+
+        // Задание 12: раскраска вершин
+        if (taskId === '12' && solution.colors) {
+            renderer.colorNodes(solution.colors);
+            isAnimating = false;
+            return;
+        }
+
+        // Задание 7: MST — подсветка рёбер
+        if (taskId === '7' && solution.edges) {
+            renderer.highlightEdges(solution.edges);
+        }
+
+        // Задание 5: компоненты связности
+        if (taskId === '5' && solution.components) {
+            renderer.highlightComponents(solution.components);
+        }
+
+        isAnimating = false;
+    }
 
     function parseComponentsInput(input) {
         const groups = input.match(/\[[^\]]+\]/g) || [];
@@ -88,7 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (taskId === '7' && sol.edges) {
             html += `<h4>Рёбра MST:</h4><ul>${sol.edges.map(e => `<li>${e.from} → ${e.to} (вес: ${e.weight})</li>`).join('')}</ul>`;
-            renderer.highlightEdges(sol.edges);
         }
         if (taskId === '8' && sol.distances) {
             html += `<table><tr><th>Вершина</th>${Object.keys(sol.distances).sort((a,b)=>a-b).map(v=>`<td>${v}</td>`).join('')}</tr>`;
@@ -101,7 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (taskId === '10' && sol.sequence) html += `<p><b>Ответ:</b> [${sol.sequence.join(', ')}]</p>`;
         if (taskId === '11' && sol.edges) html += `<p><b>Рёбра:</b> ${sol.edges.map(e => `(${e[0]},${e[1]})`).join(', ')}</p>`;
-        if (taskId === '12' && sol.colors) html += `<p><b>Цвета:</b> ${JSON.stringify(sol.colors)} (использовано ${sol.num_colors})</p>`;
+        if (taskId === '12' && sol.colors) {
+            const colorsStr = Object.entries(sol.colors).map(([v,c]) => `${v}→${c}`).join(', ');
+            html += `<p><b>Цвета вершин:</b> {${colorsStr}}<br><small>Использовано цветов: ${sol.num_colors}</small></p>`;
+        }
+        if ((taskId === '1' || taskId === '3') && sol.order) {
+            html += `<p><b>Порядок обхода:</b> ${sol.order.join(' → ')}</p>`;
+            html += `<p><small>💡 Нажмите "Показать решение" для анимации</small></p>`;
+        }
 
         solutionBox.innerHTML = html;
     }

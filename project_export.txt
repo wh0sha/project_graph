@@ -1,7 +1,7 @@
 # PROJECT CODE EXPORT
-# Generated: 2026-05-04 03:23:13
+# Generated: 2026-05-04 11:17:02
 # Root: C:\Users\whooo\OneDrive\Рабочий стол\project_graph\project_graph
-# Settings: exts={'.txt', '.yml', '.py', '.css', '.html', '.md', '.yaml', '.ini', '.toml', '.cfg', '.json', '.js'}, max_size=488.3 KB
+# Settings: exts={'.html', '.md', '.txt', '.ini', '.json', '.cfg', '.toml', '.js', '.py', '.yaml', '.yml', '.css'}, max_size=488.3 KB
 ############################################################
 
 
@@ -28,10 +28,11 @@
 
 ============================================================
 📄 ФАЙЛ: app.py
-📏 Размер: 2.4 KB | Кодировка: utf-8
+📏 Размер: 4.1 KB | Кодировка: utf-8
 ============================================================
 
 import os
+import random
 from flask import Flask, render_template, jsonify, request, session
 from core.tasks.task_0 import Task0
 from core.tasks.dfs_task import DFSTaskShow, DFSTaskCheck
@@ -56,6 +57,22 @@ TASKS = {
     10: PrueferEncodeTask(), 11: PrueferDecodeTask(), 12: ColoringTask()
 }
 
+def _get_task_seed(task_id: int) -> int:
+    """
+    Получает или генерирует seed для задачи в сессии пользователя.
+    Гарантирует, что один пользователь видит один и тот же граф для одной задачи.
+    """
+    key = f'task_seed_{task_id}'
+    if key not in session:
+        session[key] = random.randint(1, 1000000)
+    return session[key]
+
+def _reset_task_seed(task_id: int) -> int:
+    """Генерирует новый seed для задачи (для кнопки 'Новая задача')."""
+    key = f'task_seed_{task_id}'
+    session[key] = random.randint(1, 1000000)
+    return session[key]
+
 @app.route('/')
 def index():
     completed = session.get('completed_tasks', [])
@@ -66,21 +83,28 @@ def task_page(task_id):
     if task_id not in TASKS:
         return render_template('index.html', tasks=TASKS, error="Задача не найдена"), 404
     task = TASKS[task_id]
-    return render_template('task_base.html', task=task)
+    # Предварительно инициализируем seed, чтобы он был готов к запросам
+    _get_task_seed(task_id)
+    return render_template('task_base.html', task=task, task_id=task_id)
 
 @app.route('/api/task/<int:task_id>/show', methods=['GET'])
 def api_task_show(task_id):
     if task_id not in TASKS:
         return jsonify({"error": "Task not found"}), 404
-    return jsonify(TASKS[task_id].to_api_show())
+    
+    seed = _get_task_seed(task_id)
+    return jsonify(TASKS[task_id].to_api_show(seed=seed))
 
 @app.route('/api/task/<int:task_id>/check', methods=['POST'])
 def api_task_check(task_id):
     if task_id not in TASKS:
         return jsonify({"error": "Task not found"}), 404
     
+    # 🔑 Ключевое: используем тот же seed, что и при показе задачи
+    seed = _get_task_seed(task_id)
     task = TASKS[task_id]
-    graph = task.generate_graph()
+    graph = task.generate_graph(seed=seed)
+    
     user_input = request.get_json(silent=True) or {}
     result = task.check_answer(graph, user_input)
     
@@ -88,8 +112,25 @@ def api_task_check(task_id):
         completed = session.get('completed_tasks', [])
         completed.append(task_id)
         session['completed_tasks'] = completed
+        session.modified = True
     
     return jsonify(result)
+
+@app.route('/api/task/<int:task_id>/reset', methods=['POST'])
+def api_task_reset(task_id):
+    """Эндпоинт для генерации нового графа (новая вариация задачи)."""
+    if task_id not in TASKS:
+        return jsonify({"error": "Task not found"}), 404
+    
+    new_seed = _reset_task_seed(task_id)
+    task = TASKS[task_id]
+    graph = task.generate_graph(seed=new_seed)
+    
+    return jsonify({
+        "graph": graph.to_vis_format(),
+        "solution": task.get_solution(graph),
+        "seed": new_seed
+    })
 
 if __name__ == '__main__':
     app.run(debug=True)
@@ -664,20 +705,20 @@ def validate_not_empty(value: any, field_name: str = "Поле") -> Dict:
 
 ============================================================
 📄 ФАЙЛ: core\tasks\base.py
-📏 Размер: 2.0 KB | Кодировка: utf-8
+📏 Размер: 2.8 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/base.py
 """Базовый абстрактный класс для всех задач практики."""
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from ..graph import Graph
 
 class Task(ABC):
     """
     Базовый класс задачи.
     Каждый конкретный класс наследует его и реализует:
-    - генерацию графа
+    - генерацию графа (с поддержкой seed для воспроизводимости)
     - получение решения
     - проверку пользовательского ответа
     """
@@ -688,8 +729,14 @@ class Task(ABC):
         self.description = description
     
     @abstractmethod
-    def generate_graph(self) -> Graph:
-        """Создаёт и возвращает граф для текущей задачи."""
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        """
+        Создаёт и возвращает граф для текущей задачи.
+        
+        Параметры:
+            seed: Optional[int] — если указан, генерирует детерминированный граф
+                                  для воспроизводимости (важно для проверки ответа)
+        """
         pass
     
     @abstractmethod
@@ -705,12 +752,15 @@ class Task(ABC):
         """
         pass
     
-    def to_api_show(self) -> Dict[str, Any]:
+    def to_api_show(self, seed: Optional[int] = None) -> Dict[str, Any]:
         """
         Формирует JSON-структуру для эндпоинта /api/task/<id>/show.
         Вызывается автоматически при запросе данных задачи.
+        
+        Параметры:
+            seed: Optional[int] — seed для генерации графа (из сессии пользователя)
         """
-        graph = self.generate_graph()
+        graph = self.generate_graph(seed=seed)
         return {
             "task_id": self.task_id,
             "title": self.title,
@@ -718,14 +768,20 @@ class Task(ABC):
             "graph": graph.to_vis_format(),
             "solution": self.get_solution(graph)
         }
+    
+    def _get_default_seed(self) -> int:
+        """Возвращает дефолтный seed для обратной совместимости."""
+        return 42
 
 
 ============================================================
 📄 ФАЙЛ: core\tasks\bfs_task.py
-📏 Размер: 2.3 KB | Кодировка: utf-8
+📏 Размер: 3.5 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/bfs_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -737,7 +793,23 @@ class BFSTaskShow(Task):
         super().__init__(3, "BFS — Показать",
             "Найдите порядок обхода графа в ширину, начиная с вершины <b>0</b>.")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 7)
+            adj = {v: [] for v in range(n)}
+            # Остовное дерево + дополнительные рёбра
+            for v in range(1, n):
+                u = rng.randint(0, v-1)
+                adj[u].append(v)
+                adj[v].append(u)
+            for _ in range(rng.randint(1, n//2)):
+                u, v = rng.sample(range(n), 2)
+                if v not in adj[u]:
+                    adj[u].append(v)
+                    adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
         return Graph.from_adjacency_matrix([
             [0,1,1,0,0],
             [1,0,0,1,0],
@@ -761,8 +833,22 @@ class BFSTaskCheck(Task):
         super().__init__(4, "BFS — Проверить",
             "Введите порядок обхода в ширину, начиная с вершины <b>0</b> (числа через запятую).")
     
-    def generate_graph(self) -> Graph:
-        # Граф с чёткими уровнями для строгой проверки
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 6)
+            adj = {v: [] for v in range(n)}
+            for v in range(1, n):
+                u = rng.randint(0, v-1)
+                adj[u].append(v)
+                adj[v].append(u)
+            for _ in range(rng.randint(1, 2)):
+                u, v = rng.sample(range(n), 2)
+                if v not in adj[u]:
+                    adj[u].append(v)
+                    adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
         return Graph.from_adjacency_matrix([
             [0,1,1,0,0],
             [1,0,0,1,1],
@@ -787,10 +873,12 @@ class BFSTaskCheck(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\coloring_task.py
-📏 Размер: 1.6 KB | Кодировка: utf-8
+📏 Размер: 2.5 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/coloring_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -802,8 +890,28 @@ class ColoringTask(Task):
         super().__init__(12, "Раскраска графа",
             "Введите цвета вершин (числа через запятую, начиная с 0). Смежные вершины должны иметь разные цвета.")
     
-    def generate_graph(self) -> Graph:
-        # Граф C5 с хордой (требует 3 цвета)
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 7)
+            adj = {v: [] for v in range(n)}
+            
+            # Случайные рёбра с вероятностью 0.4 для интересной раскраски
+            for u in range(n):
+                for v in range(u + 1, n):
+                    if rng.random() < 0.4:
+                        adj[u].append(v)
+                        adj[v].append(u)
+            
+            # Гарантируем наличие хотя бы одного ребра
+            if n > 1 and not any(adj[u] for u in adj):
+                u, v = rng.sample(range(n), 2)
+                adj[u].append(v)
+                adj[v].append(u)
+                
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированный граф C5 с хордой
         adj = {0:[1,4,2], 1:[0,2], 2:[1,3,0], 3:[2,4], 4:[3,0]}
         return Graph.from_adjacency_list(adj)
     
@@ -824,14 +932,16 @@ class ColoringTask(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\connectivity_task.py
-📏 Размер: 2.8 KB | Кодировка: utf-8
+📏 Размер: 4.2 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/connectivity_task.py
+import re
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
-import re
 
 class ConnectivityTaskShow(Task):
     """Задача 5: Показать компоненты связности"""
@@ -840,10 +950,26 @@ class ConnectivityTaskShow(Task):
         super().__init__(5, "Компоненты связности — Показать",
             "Определите количество компонент связности графа и их состав.")
     
-    def generate_graph(self) -> Graph:
-        # Граф с 3 компонентами: {0,1}, {2,3,4}, {5}
-        adj = {0: [1], 1: [0], 2: [3,4], 3: [2,4], 4: [2,3], 5: []}
-        return Graph.from_adjacency_list(adj)
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 8)
+            adj = {v: [] for v in range(n)}
+            # Генерируем случайные рёбра с низкой вероятностью, чтобы граф часто был несвязным
+            for u in range(n):
+                for v in range(u + 1, n):
+                    if rng.random() < 0.25:
+                        adj[u].append(v)
+                        adj[v].append(u)
+            # Гарантируем хотя бы одно ребро, если вершин > 1
+            if n > 1 and not any(adj[u] for u in adj):
+                u, v = rng.sample(range(n), 2)
+                adj[u].append(v)
+                adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированный граф: 3 компоненты {0,1}, {2,3,4}, {5}
+        return Graph.from_adjacency_list({0: [1], 1: [0], 2: [3,4], 3: [2,4], 4: [2,3], 5: []})
     
     def get_solution(self, graph: Graph) -> dict:
         comps = Algorithms.find_connected_components(graph)
@@ -865,10 +991,24 @@ class ConnectivityTaskCheck(Task):
         super().__init__(6, "Компоненты связности — Проверить",
             "Введите компоненты связности в формате: <code>[0,1], [2,3]</code> (группы через запятую).")
     
-    def generate_graph(self) -> Graph:
-        # Граф с 2 компонентами: {0,1,2}, {3,4}
-        adj = {0: [1,2], 1: [0,2], 2: [0,1], 3: [4], 4: [3]}
-        return Graph.from_adjacency_list(adj)
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 7)
+            adj = {v: [] for v in range(n)}
+            for u in range(n):
+                for v in range(u + 1, n):
+                    if rng.random() < 0.3:
+                        adj[u].append(v)
+                        adj[v].append(u)
+            if n > 1 and not any(adj[u] for u in adj):
+                u, v = rng.sample(range(n), 2)
+                adj[u].append(v)
+                adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированный граф: 2 компоненты {0,1,2}, {3,4}
+        return Graph.from_adjacency_list({0: [1,2], 1: [0,2], 2: [0,1], 3: [4], 4: [3]})
     
     def get_solution(self, graph: Graph) -> dict:
         comps = Algorithms.find_connected_components(graph)
@@ -877,7 +1017,6 @@ class ConnectivityTaskCheck(Task):
     def check_answer(self, graph: Graph, user_input: dict) -> dict:
         try:
             raw = user_input.get("components", "").strip()
-            # Извлекаем содержимое квадратных скобок
             groups = re.findall(r'\[([^\]]+)\]', raw)
             parsed = []
             for g in groups:
@@ -890,10 +1029,12 @@ class ConnectivityTaskCheck(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\dfs_task.py
-📏 Размер: 2.2 KB | Кодировка: utf-8
+📏 Размер: 3.7 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/dfs_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -905,7 +1046,25 @@ class DFSTaskShow(Task):
         super().__init__(1, "DFS — Показать",
             "Найдите порядок обхода графа в глубину, начиная с вершины <b>0</b>.")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 7)
+            adj = {v: [] for v in range(n)}
+            # 1. Гарантируем связность через случайное остовное дерево
+            for v in range(1, n):
+                u = rng.randint(0, v-1)
+                adj[u].append(v)
+                adj[v].append(u)
+            # 2. Добавляем случайные дополнительные рёбра
+            for _ in range(rng.randint(1, n)):
+                u, v = rng.sample(range(n), 2)
+                if v not in adj[u]:
+                    adj[u].append(v)
+                    adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированный граф для обратной совместимости / демо
         return Graph.from_adjacency_matrix([
             [0,1,1,0],
             [1,0,1,1],
@@ -928,7 +1087,22 @@ class DFSTaskCheck(Task):
         super().__init__(2, "DFS — Проверить",
             "Введите порядок обхода в глубину, начиная с вершины <b>0</b> (числа через запятую).")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 6)
+            adj = {v: [] for v in range(n)}
+            for v in range(1, n):
+                u = rng.randint(0, v-1)
+                adj[u].append(v)
+                adj[v].append(u)
+            for _ in range(rng.randint(1, 3)):
+                u, v = rng.sample(range(n), 2)
+                if v not in adj[u]:
+                    adj[u].append(v)
+                    adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
         return Graph.from_adjacency_matrix([
             [0,1,0,1],
             [1,0,1,0],
@@ -952,10 +1126,12 @@ class DFSTaskCheck(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\dijkstra_task.py
-📏 Размер: 1.3 KB | Кодировка: utf-8
+📏 Размер: 2.3 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/dijkstra_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -967,7 +1143,30 @@ class DijkstraTask(Task):
         super().__init__(8, "Кратчайшие пути (Дейкстра)",
             "Найдите кратчайшие расстояния от вершины <b>0</b> до всех остальных.")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(4, 6)
+            matrix = [[0] * n for _ in range(n)]
+            
+            # 1. Остовное дерево для связности
+            for v in range(1, n):
+                u = rng.randint(0, v - 1)
+                w = rng.randint(1, 20)
+                matrix[u][v] = w
+                matrix[v][u] = w
+                
+            # 2. Дополнительные рёбра (альтернативные пути)
+            for _ in range(rng.randint(1, 3)):
+                u, v = rng.sample(range(n), 2)
+                if matrix[u][v] == 0:
+                    w = rng.randint(1, 20)
+                    matrix[u][v] = w
+                    matrix[v][u] = w
+                    
+            return Graph.from_adjacency_matrix(matrix)
+        
+        # Фиксированный взвешенный граф
         matrix = [
             [0,4,0,0,0],
             [4,0,8,0,0],
@@ -991,10 +1190,12 @@ class DijkstraTask(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\floyd_task.py
-📏 Размер: 1.1 KB | Кодировка: utf-8
+📏 Размер: 2.2 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/floyd_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -1006,7 +1207,30 @@ class FloydTask(Task):
         super().__init__(9, "Матрица кратчайших путей (Флойд-Уоршелл)",
             "Постройте матрицу кратчайших путей между всеми парами вершин.")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(4, 6)
+            matrix = [[0] * n for _ in range(n)]
+            
+            # 1. Остовное дерево гарантирует связность графа
+            for v in range(1, n):
+                u = rng.randint(0, v - 1)
+                w = rng.randint(1, 10)
+                matrix[u][v] = w
+                matrix[v][u] = w
+                
+            # 2. Дополнительные рёбра для альтернативных путей
+            for _ in range(rng.randint(1, n)):
+                u, v = rng.sample(range(n), 2)
+                if matrix[u][v] == 0:
+                    w = rng.randint(1, 10)
+                    matrix[u][v] = w
+                    matrix[v][u] = w
+                    
+            return Graph.from_adjacency_matrix(matrix)
+        
+        # Фиксированный граф для обратной совместимости
         matrix = [
             [0,3,0,7],
             [8,0,2,0],
@@ -1025,10 +1249,12 @@ class FloydTask(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\mst_task.py
-📏 Размер: 1.3 KB | Кодировка: utf-8
+📏 Размер: 2.4 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/mst_task.py
+import random
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
@@ -1040,7 +1266,30 @@ class MSTTask(Task):
         super().__init__(7, "Минимальное остовное дерево (Прим)",
             "Найдите рёбра минимального остовного дерева (MST) графа. Алгоритм: <b>Прим</b>.")
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(5, 7)
+            matrix = [[0] * n for _ in range(n)]
+            
+            # 1. Строим случайное остовное дерево (гарантирует связность)
+            for v in range(1, n):
+                u = rng.randint(0, v - 1)
+                w = rng.randint(1, 15)
+                matrix[u][v] = w
+                matrix[v][u] = w
+                
+            # 2. Добавляем случайные дополнительные рёбра с весами
+            for _ in range(rng.randint(2, 4)):
+                u, v = rng.sample(range(n), 2)
+                if matrix[u][v] == 0:  # ребро ещё не существует
+                    w = rng.randint(1, 15)
+                    matrix[u][v] = w
+                    matrix[v][u] = w
+                    
+            return Graph.from_adjacency_matrix(matrix)
+        
+        # Фиксированный взвешенный граф
         matrix = [
             [0,2,0,6,0],
             [2,0,3,8,5],
@@ -1064,14 +1313,16 @@ class MSTTask(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\prufer_task.py
-📏 Размер: 3.5 KB | Кодировка: utf-8
+📏 Размер: 4.5 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/prufer_task.py
+import random
+import re
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
-import re
 
 class PrueferEncodeTask(Task):
     """Задача 10: Кодирование дерева в последовательность Прюфера"""
@@ -1080,8 +1331,19 @@ class PrueferEncodeTask(Task):
         super().__init__(10, "Кодирование Прюфера",
             "Дано помеченное дерево. Введите последовательность Прюфера (числа через запятую).")
     
-    def generate_graph(self) -> Graph:
-        # Дерево: 0-1, 0-2, 0-3, 2-4
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(4, 7)
+            adj = {v: [] for v in range(n)}
+            # Генерация случайного остовного дерева (гарантирует структуру дерева)
+            for v in range(1, n):
+                u = rng.randint(0, v - 1)
+                adj[u].append(v)
+                adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированное дерево
         adj = {0:[1,2,3], 1:[0], 2:[0,4], 3:[0], 4:[2]}
         return Graph.from_adjacency_list(adj)
     
@@ -1106,11 +1368,20 @@ class PrueferDecodeTask(Task):
     
     def __init__(self):
         super().__init__(11, "Декодирование Прюфера",
-            "Дана последовательность: <b>[1, 2, 2]</b>. Введите рёбра восстановленного дерева в формате <code>(u,v)</code> через запятую.")
-        self.sequence = [1, 2, 2]
-        self.n = 5
+            "Дана последовательность Прюфера. Введите рёбра восстановленного дерева в формате <code>(u,v)</code> через запятую.")
+        self.sequence = None
+        self.n = None
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            self.n = rng.randint(4, 6)
+            # Генерация валидной последовательности Прюфера длины n-2
+            self.sequence = [rng.randint(0, self.n - 1) for _ in range(self.n - 2)]
+        else:
+            self.sequence = [1, 2, 2]
+            self.n = 5
+            
         edges = Algorithms.pruefer_decode(self.sequence, self.n)
         adj = {i: [] for i in range(self.n)}
         for u, v in edges:
@@ -1143,10 +1414,11 @@ class PrueferDecodeTask(Task):
 
 ============================================================
 📄 ФАЙЛ: core\tasks\task_0.py
-📏 Размер: 1.2 KB | Кодировка: utf-8
+📏 Размер: 1.3 KB | Кодировка: utf-8
 ============================================================
 
 # core/tasks/task_0.py
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 
@@ -1158,8 +1430,8 @@ class Task0(Task):
             "Добро пожаловать! Изучите базовое представление графа: "
             "вершины (круги) и рёбра (линии). Перетаскивайте узлы, чтобы понять структуру.")
     
-    def generate_graph(self) -> Graph:
-        # Простой связный граф-треугольник
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        # Для вводной задачи граф фиксированный, seed не используется
         return Graph.from_adjacency_list({0: [1, 2], 1: [0, 2], 2: [0, 1]})
     
     def get_solution(self, graph: Graph) -> dict:
@@ -1174,7 +1446,7 @@ class Task0(Task):
 
 ============================================================
 📄 ФАЙЛ: static\css\style.css
-📏 Размер: 6.3 KB | Кодировка: utf-8
+📏 Размер: 6.6 KB | Кодировка: utf-8
 ============================================================
 
 /* static/css/style.css */
@@ -1223,6 +1495,7 @@ body {
     padding: 16px 20px;
     box-shadow: var(--shadow);
     border-bottom: 1px solid var(--border);
+    position: relative;
 }
 .app-header .logo {
     font-size: 1.2rem;
@@ -1240,19 +1513,21 @@ body {
     border-top: 1px solid var(--border);
 }
 .theme-toggle {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    background: var(--card);
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+    background: var(--bg);
     border: 1px solid var(--border);
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 500;
-    z-index: 100;
+    color: var(--text);
     box-shadow: var(--shadow);
-    transition: background 0.2s;
+    transition: background 0.2s, color 0.2s;
+    z-index: 10;
 }
 .theme-toggle:hover { opacity: 0.85; }
 
@@ -1314,22 +1589,23 @@ body {
     margin: 20px 0;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #fafafa;
+    background: var(--bg);
     position: relative;
 }
-[data-theme="dark"] .graph-box { background: #222; }
 
-/* vis.js label overrides */
-.vis-network .vis-label {
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    color: #333 !important;
-    text-shadow: 0 0 4px rgba(255,255,255,0.8) !important;
+/* Vis.js label & tooltip overrides */
+.vis-tooltip {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2) !important;
+    padding: 4px 8px !important;
+    font-family: inherit !important;
 }
-[data-theme="dark"] .vis-network .vis-label {
-    color: #eee !important;
-    text-shadow: 0 0 4px rgba(0,0,0,0.8) !important;
-}
+.vis-navigation-panel { display: none !important; }
+.vis-loading-overlay { background: var(--bg) !important; }
+.vis-label { font-weight: 500 !important; }
 
 .answer-form {
     display: flex;
@@ -1387,7 +1663,7 @@ body {
 }
 .solution table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 .solution th, .solution td { border: 1px solid var(--border); padding: 8px; text-align: center; }
-.solution th { background: rgba(0,0,0,0.05); }
+.solution th { background: rgba(0,0,0,0.05); color: var(--text); }
 [data-theme="dark"] .solution th { background: rgba(255,255,255,0.1); }
 
 @keyframes slideIn {
@@ -1400,6 +1676,7 @@ body {
     .graph-box { height: 300px; }
     .task-list { grid-template-columns: 1fr; }
     .answer-form button { width: 100%; }
+    .theme-toggle { position: fixed; top: 16px; right: 16px; transform: none; }
 }
 
 
@@ -1430,7 +1707,7 @@ body {
 
 ============================================================
 📄 ФАЙЛ: static\js\graph-renderer.js
-📏 Размер: 3.8 KB | Кодировка: utf-8
+📏 Размер: 4.9 KB | Кодировка: utf-8
 ============================================================
 
 // static/js/graph-renderer.js
@@ -1449,41 +1726,54 @@ class GraphRenderer {
             physics: { enabled: true, stabilization: { iterations: 120 } },
             ...options
         };
+        
+        // Подписываемся на глобальное событие смены темы (вместо дублирования слушателей)
+        window.addEventListener('themeChanged', () => this._applyThemeToNetwork());
     }
 
     render(data) {
         if (!this.container || !data) return;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const labelColor = isDark ? '#eee' : '#333';
+        const nodeBg = isDark ? '#4a5568' : '#e0e0e0';
+        const nodeBorder = isDark ? '#718096' : '#333';
+
         const visData = {
             nodes: new vis.DataSet(data.nodes.map(n => ({
                 ...n,
-                color: { background: '#e0e0e0', border: '#333', highlight: { background: '#007bff', border: '#0056b3' } },
+                color: { background: nodeBg, border: nodeBorder, highlight: { background: '#007bff', border: '#0056b3' } },
+                font: { color: labelColor },
                 label: n.label || String(n.id)
             }))),
             edges: new vis.DataSet(data.edges.map(e => ({
                 ...e,
-                color: { color: '#888', highlight: '#007bff' }
+                color: { color: isDark ? '#888' : '#999', highlight: '#007bff' },
+                font: { size: 12, color: isDark ? '#ccc' : '#666', strokeWidth: 2, strokeColor: isDark ? '#222' : '#fff' }
             })))
         };
-        this.network = new vis.Network(this.container, visData, this.options);
         
-        // Принудительно обновляем цвета меток при смене темы
-        this._applyThemeLabels();
-        document.getElementById('themeToggle')?.addEventListener('click', () => {
-            setTimeout(() => this._applyThemeLabels(), 50);
-        });
+        this.network = new vis.Network(this.container, visData, this.options);
+        this._applyThemeToNetwork();
         return this.network;
     }
 
-    _applyThemeLabels() {
+    _applyThemeToNetwork() {
         if (!this.network) return;
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const color = isDark ? '#eee' : '#333';
+        const labelColor = isDark ? '#eee' : '#333';
+        
         const nodes = this.network.body.data.nodes;
         const updates = nodes.get().map(n => ({
             id: n.id,
-            font: { ...n.font, color: color }
+            font: { color: labelColor }
         }));
         nodes.update(updates);
+
+        const edges = this.network.body.data.edges;
+        edges.update(edges.get().map(e => ({
+            id: e.id,
+            font: { color: isDark ? '#ccc' : '#666', strokeColor: isDark ? '#222' : '#fff' }
+        })));
     }
 
     highlightEdges(edgeList) {
@@ -1504,13 +1794,22 @@ class GraphRenderer {
         if (!this.network || !colorsMap) return;
         const palette = {1:'#FF9800', 2:'#4CAF50', 3:'#2196F3', 4:'#9C27B0', 5:'#F44336', 6:'#00BCD4'};
         const nodes = this.network.body.data.nodes;
+        
         nodes.update(nodes.get().map(n => {
             const colorId = colorsMap[n.id];
             const bg = palette[colorId] || '#888';
+            
+            // Динамический расчет контрастного цвета текста (белый/черный)
+            const r = parseInt(bg.slice(1, 3), 16);
+            const g = parseInt(bg.slice(3, 5), 16);
+            const b = parseInt(bg.slice(5, 7), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            const textColor = brightness > 128 ? '#000' : '#fff';
+
             return { 
                 id: n.id, 
                 color: { background: bg, border: '#333', highlight: bg }, 
-                font: { color: '#fff' } 
+                font: { color: textColor } 
             };
         }));
     }
@@ -1533,32 +1832,44 @@ window.GraphRenderer = GraphRenderer;
 
 ============================================================
 📄 ФАЙЛ: static\js\main.js
-📏 Размер: 655.0 B | Кодировка: utf-8
+📏 Размер: 1.4 KB | Кодировка: utf-8
 ============================================================
 
-// static/js/main.js
+// static/js/main.js - ключевые части
 (function() {
     'use strict';
     
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    const STORAGE_KEY = 'theme';
+    const DEFAULT_THEME = 'light';
 
-    window.handleAppError = (msg) => {
-        console.error('[AppError]', msg);
-        const fb = document.getElementById('feedback');
-        if (fb) {
-            fb.textContent = msg;
-            fb.className = 'feedback incorrect';
-            fb.classList.remove('hidden');
+    function initTheme() {
+        const saved = localStorage.getItem(STORAGE_KEY) || DEFAULT_THEME;
+        document.documentElement.setAttribute('data-theme', saved);
+        return saved;
+    }
+
+    function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem(STORAGE_KEY, theme);
+        // 🔥 Критично: уведомляем все компоненты о смене темы
+        window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
+    }
+
+    // Инициализация при загрузке DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        initTheme();
+        const toggle = document.getElementById('themeToggle');
+        if (toggle) {
+            toggle.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-theme');
+                setTheme(current === 'dark' ? 'light' : 'dark');
+            });
         }
-    };
+    });
 
-    window.APP_CONFIG = {
-        API_BASE: '/api',
-        DEFAULT_TASK: 0
-    };
-
-    console.log('project_graph core initialized');
+    // Экспорт для внешних скриптов
+    window.setTheme = setTheme;
+    window.getCurrentTheme = () => document.documentElement.getAttribute('data-theme');
 })();
 
 
@@ -1679,7 +1990,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 ============================================================
 📄 ФАЙЛ: templates\base.html
-📏 Размер: 2.8 KB | Кодировка: utf-8
+📏 Размер: 2.7 KB | Кодировка: utf-8
 ============================================================
 
 <!-- templates/base.html -->
@@ -1733,19 +2044,14 @@ document.addEventListener('DOMContentLoaded', () => {
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     
-    <!-- Скрипт темы (универсальный) -->
+    <!-- 🎨 Скрипт темы вынесен в main.js - здесь только инициализация при необходимости -->
     <script>
+        // Инициализация темы из localStorage при первой загрузке
+        // Вся логика переключения уже в static/js/main.js
         (function() {
             const saved = localStorage.getItem('theme');
-            if (saved) document.documentElement.setAttribute('data-theme', saved);
-            const toggle = document.getElementById('themeToggle');
-            if (toggle) {
-                toggle.addEventListener('click', () => {
-                    const current = document.documentElement.getAttribute('data-theme');
-                    const next = current === 'dark' ? 'light' : 'dark';
-                    document.documentElement.setAttribute('data-theme', next);
-                    localStorage.setItem('theme', next);
-                });
+            if (saved && !document.documentElement.getAttribute('data-theme')) {
+                document.documentElement.setAttribute('data-theme', saved);
             }
         })();
     </script>

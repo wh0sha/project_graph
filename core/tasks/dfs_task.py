@@ -78,7 +78,11 @@ class DFSTaskCheck(Task):
     
     def get_solution(self, graph: Graph) -> dict:
         order = Algorithms.dfs(graph, start=0)
-        return {"order": order}
+        return {
+            "order": order, 
+            "explanation": f"Порядок DFS: {' → '.join(map(str, order))}",
+            "animation_hint": "Вершины будут подсвечиваться по порядку обхода"
+        }
     
     def check_answer(self, graph: Graph, user_input: dict) -> dict:
         raw = user_input.get("order", "")

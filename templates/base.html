@@ -49,19 +49,14 @@
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     
-    <!-- Скрипт темы (универсальный) -->
+    <!-- 🎨 Скрипт темы вынесен в main.js - здесь только инициализация при необходимости -->
     <script>
+        // Инициализация темы из localStorage при первой загрузке
+        // Вся логика переключения уже в static/js/main.js
         (function() {
             const saved = localStorage.getItem('theme');
-            if (saved) document.documentElement.setAttribute('data-theme', saved);
-            const toggle = document.getElementById('themeToggle');
-            if (toggle) {
-                toggle.addEventListener('click', () => {
-                    const current = document.documentElement.getAttribute('data-theme');
-                    const next = current === 'dark' ? 'light' : 'dark';
-                    document.documentElement.setAttribute('data-theme', next);
-                    localStorage.setItem('theme', next);
-                });
+            if (saved && !document.documentElement.getAttribute('data-theme')) {
+                document.documentElement.setAttribute('data-theme', saved);
             }
         })();
     </script>

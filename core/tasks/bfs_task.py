@@ -78,7 +78,11 @@ class BFSTaskCheck(Task):
     
     def get_solution(self, graph: Graph) -> dict:
         order = Algorithms.bfs(graph, start=0)
-        return {"order": order}
+        return {
+            "order": order,
+            "explanation": f"Порядок BFS: {' → '.join(map(str, order))}",
+            "animation_hint": "Вершины будут подсвечиваться по уровням"
+        }
     
     def check_answer(self, graph: Graph, user_input: dict) -> dict:
         raw = user_input.get("order", "")

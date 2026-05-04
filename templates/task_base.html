@@ -3,38 +3,104 @@
 
 {% block title %}{{ task.title }} — project_graph{% endblock %}
 
-{% block extra_head %}
-<!-- Дополнительные стили для страницы задачи, если нужны -->
-{% endblock %}
-
 {% block content %}
 <div class="task-wrapper" data-task-id="{{ task.task_id }}">
     <div class="task-header">
         <h2>Задача {{ task.task_id }}: {{ task.title }}</h2>
         <p>{{ task.description|safe }}</p>
-        <p class="vertex-hint">💡 Вершины нумеруются с 0: {{ task.generate_graph().vertex|list }}</p>
+        <p class="vertex-hint">💡 Вершины: {{ task.generate_graph().vertex|list|join(', ') }}</p>
     </div>
     
     <div id="graph-container" class="graph-box"></div>
     
+    <!-- 🔥 Форма ответа с динамическими подсказками -->
+    {% if task.task_id not in [0, 7, 8, 9] %}  {# Задачи без ввода пользователя #}
     <form id="answer-form" class="answer-form">
         <label for="user-input">Ваш ответ:</label>
+        
+        <!-- Динамический placeholder -->
         <input type="text" id="user-input" name="user-input" 
-               placeholder="Например: 0, 1, 2, 3" required>
-        <small class="hint">Формат зависит от задачи — см. описание выше</small>
+               placeholder="{{ get_input_placeholder(task.task_id) }}" 
+               required
+               autocomplete="off">
+        
+        <!-- Динамическая подсказка -->
+        <small class="hint" id="input-hint">{{ get_input_hint(task.task_id) }}</small>
+        
         <div class="task-actions">
             <button type="submit" class="btn-primary">Проверить</button>
             <button type="button" id="toggle-solution" class="btn-secondary">Показать решение</button>
         </div>
     </form>
+    {% else %}
+        <!-- 🔹 Задачи только для просмотра решения -->
+        <div class="info-box">
+            <p>💡 В этой задаче ответ не вводится — изучите решение ниже.</p>
+            <button type="button" id="toggle-solution" class="btn-secondary">Показать решение</button>
+        </div>
+    {% endif %}
     
     <div id="feedback" class="feedback hidden"></div>
     <div id="solution" class="solution hidden"></div>
 </div>
+
+<!-- 🔥 Скрытый блок с данными для JS -->
+<div id="task-meta" 
+     data-task-id="{{ task.task_id }}"
+     data-vertex-count="{{ task.generate_graph().vertex|length }}"
+     data-start-vertex="0"
+     class="hidden">
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Скрипты, нужные только на странице задачи -->
 <script src="{{ url_for('static', filename='js/graph-renderer.js') }}"></script>
 <script src="{{ url_for('static', filename='js/task-handler.js') }}"></script>
+
+<!-- 🔥 Скрипт для динамических подсказок -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const meta = document.getElementById('task-meta');
+    const input = document.getElementById('user-input');
+    const hint = document.getElementById('input-hint');
+    const taskId = meta?.dataset.taskId;
+    const vertexCount = parseInt(meta?.dataset.vertexCount || '0');
+    
+    if (!input || !hint || !taskId) return;
+    
+    // 🔹 Обновляем подсказку при фокусе на поле
+    input.addEventListener('focus', () => {
+        if (taskId === '12') {
+            hint.innerHTML = `Введите <b>${vertexCount} чисел</b> через запятую: цвет для вершины 0, затем для 1, 2, ... ${vertexCount-1}<br>Пример: <code>1, 2, 1, 2, 3</code>`;
+        } else if (['1','2','3','4'].includes(taskId)) {
+            hint.innerHTML = `Начните с вершины <b>0</b>, затем перечислите остальные через запятую.<br>Пример: <code>0, 1, 3, 2, 4</code>`;
+        } else if (taskId === '6') {
+            hint.innerHTML = `Группы вершин в квадратных скобках, группы разделены запятыми.<br>Пример: <code>[0,1], [2,3,4]</code>`;
+        } else if (taskId === '10') {
+            hint.innerHTML = `Последовательность чисел Прюфера через запятую.<br>Пример: <code>0, 2, 1</code>`;
+        } else if (taskId === '11') {
+            hint.innerHTML = `Рёбра в формате (u,v) через запятую.<br>Пример: <code>(0,1), (1,2), (2,3)</code>`;
+        }
+    });
+    
+    // 🔹 Сброс подсказки при потере фокуса
+    input.addEventListener('blur', () => {
+        hint.innerHTML = getBaseHint(taskId, vertexCount);
+    });
+    
+    function getBaseHint(taskId, vertexCount) {
+        const hints = {
+            '1': 'Порядок обхода DFS: числа через запятую',
+            '2': 'Порядок обхода DFS: числа через запятую',
+            '3': 'Порядок обхода BFS: числа через запятую',
+            '4': 'Порядок обхода BFS: числа через запятую',
+            '6': 'Компоненты: [0,1], [2,3]',
+            '10': 'Код Прюфера: числа через запятую',
+            '11': 'Рёбра: (0,1), (1,2)',
+            '12': `Цвета вершин: ${vertexCount} чисел через запятую`
+        };
+        return hints[taskId] || '';
+    }
+});
+</script>
 {% endblock %}

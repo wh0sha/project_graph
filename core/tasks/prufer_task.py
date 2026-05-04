@@ -1,8 +1,10 @@
 # core/tasks/prufer_task.py
+import random
+import re
+from typing import Optional
 from .base import Task
 from ..graph import Graph
 from ..algorithms import Algorithms
-import re
 
 class PrueferEncodeTask(Task):
     """Задача 10: Кодирование дерева в последовательность Прюфера"""
@@ -11,8 +13,19 @@ class PrueferEncodeTask(Task):
         super().__init__(10, "Кодирование Прюфера",
             "Дано помеченное дерево. Введите последовательность Прюфера (числа через запятую).")
     
-    def generate_graph(self) -> Graph:
-        # Дерево: 0-1, 0-2, 0-3, 2-4
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            n = rng.randint(4, 7)
+            adj = {v: [] for v in range(n)}
+            # Генерация случайного остовного дерева (гарантирует структуру дерева)
+            for v in range(1, n):
+                u = rng.randint(0, v - 1)
+                adj[u].append(v)
+                adj[v].append(u)
+            return Graph.from_adjacency_list(adj)
+        
+        # Фиксированное дерево
         adj = {0:[1,2,3], 1:[0], 2:[0,4], 3:[0], 4:[2]}
         return Graph.from_adjacency_list(adj)
     
@@ -37,11 +50,20 @@ class PrueferDecodeTask(Task):
     
     def __init__(self):
         super().__init__(11, "Декодирование Прюфера",
-            "Дана последовательность: <b>[1, 2, 2]</b>. Введите рёбра восстановленного дерева в формате <code>(u,v)</code> через запятую.")
-        self.sequence = [1, 2, 2]
-        self.n = 5
+            "Дана последовательность Прюфера. Введите рёбра восстановленного дерева в формате <code>(u,v)</code> через запятую.")
+        self.sequence = None
+        self.n = None
     
-    def generate_graph(self) -> Graph:
+    def generate_graph(self, seed: Optional[int] = None) -> Graph:
+        if seed is not None:
+            rng = random.Random(seed)
+            self.n = rng.randint(4, 6)
+            # Генерация валидной последовательности Прюфера длины n-2
+            self.sequence = [rng.randint(0, self.n - 1) for _ in range(self.n - 2)]
+        else:
+            self.sequence = [1, 2, 2]
+            self.n = 5
+            
         edges = Algorithms.pruefer_decode(self.sequence, self.n)
         adj = {i: [] for i in range(self.n)}
         for u, v in edges:
